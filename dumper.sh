@@ -1148,8 +1148,49 @@ if [[ -s "${PROJECT_DIR}"/.github_token ]]; then
 	else
 		curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" -d '{ "name": "'"${repo}"'", "description": "'"${description}"'"}' "https://api.github.com/orgs/${GIT_ORG}/repos" >/dev/null 2>&1
 	fi
-	curl -s -X PUT -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github.mercy-preview+json" -d '{ "names": ["'"${platform}"'","'"${manufacturer}"'","'"${top_codename}"'","firmware","dump"]}' "https://api.github.com/repos/${GIT_ORG}/${repo}/topics" 	# Update Repository Topics
-	
+	curl -s -X PUT -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github.mercy-preview+json" -d '{ "names": ["'"${platform}"'","'"${manufacturer}"'","'"${top_codename}"'","firmware","dump"]}' "https://api.github.com/repos/${GIT_ORG}/${repo}/topics" # Update Repository Topics
+
+	# Compress specific files to bypass git lfs ## TODO: To be done
+	allowlist=(
+		## START GENERIC ##
+		# Allow every file on vendor to be compressed
+		#"vendor/"
+		"vendor/lib"
+		# Allow every file inside odm to be compressed
+		#"odm/"
+		"odm/lib"
+		# Allow all images to be compressed
+		".img"
+		".elf"
+		## END GENERIC ##
+		# Allow MiuiCamera apk to be compressed
+		"MiuiCamera.apk"
+	)
+	compressed_files=()
+	while IFS= read -r file_path; do
+		if [ -f "$file_path" ]; then
+			file_size=$(du -b "$file_path" | cut -f1)
+
+			if [ "$file_size" -le $((194 * 1024 * 1024)) ]; then # 194M
+				for pattern in "${allowlist[@]}"; do
+					if [[ "$file_path" == *"$pattern"* ]]; then
+						compressed_file="${file_path}.xz"
+						zstd --ultra -22 --long -M512 -T0 --format=xz "$file_path" -o "$compressed_file"
+						compressed_files+=("$compressed_file")
+						break
+					fi
+				done
+			fi
+		fi
+	done <.gitignore
+	printf '%s\n' "${compressed_files[@]}" >compressed_files.txt
+	cat >extract_files.sh <<'EOF'
+#!/bin/bash
+while IFS= read -r file; do
+    unzstd "$file"
+done < compressed_files.txt
+EOF
+
 	# Commit and Push
 	printf "\nPushing to %s via HTTPS...\nBranch:%s\n" "https://github.com/${GIT_ORG}/${repo}.git" "${branch}"
 	sleep 1
