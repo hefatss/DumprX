@@ -912,7 +912,7 @@ manufacturer=$(grep -m1 -oP "(?<=^ro.product.manufacturer=).*" -hs {system,syste
 [[ -z "${manufacturer}" ]] && manufacturer=$(grep -m1 -oP "(?<=^ro.product.product.manufacturer=).*" -hs vendor/euclid/product/build*.prop)
 [[ -z "${manufacturer}" ]] && manufacturer=$(grep -m1 -oP "(?<=^ro.product.vendor.manufacturer=).*" -hs vendor/build*.prop)
 [[ -z "${manufacturer}" ]] && manufacturer=$(grep -m1 -oP "(?<=^ro.product.system.manufacturer=).*" -hs {system,system/system}/build*.prop)
-fingerprint=$(grep -m1 -oP "(?<=^ro.build.fingerprint=).*" -hs {system,system/system}/build*.prop)
+fingerprint=$(grep -m1 -oP "(?<=^ro.odm.build.fingerprint=).*" -hs odm/etc/*build*.prop)
 [[ -z "${fingerprint}" ]] && fingerprint=$(grep -m1 -oP "(?<=^ro.vendor.build.fingerprint=).*" -hs vendor/build*.prop | head -1)
 [[ -z "${fingerprint}" ]] && fingerprint=$(grep -m1 -oP "(?<=^ro.system.build.fingerprint=).*" -hs {system,system/system}/build*.prop)
 [[ -z "${fingerprint}" ]] && fingerprint=$(grep -m1 -oP "(?<=^ro.product.build.fingerprint=).*" -hs product/build*.prop)
@@ -931,7 +931,7 @@ brand=$(grep -m1 -oP "(?<=^ro.product.brand=).*" -hs {system,system/system,vendo
 [[ -z "${brand}" ]] && brand=$(grep -m1 -oP "(?<=^ro.product.brand=).*" -hs {oppo_product,my_product}/build*.prop | head -1)
 [[ -z "${brand}" ]] && brand=$(grep -m1 -oP "(?<=^ro.product.brand=).*" -hs vendor/euclid/*/build.prop | head -1)
 [[ -z "${brand}" ]] && brand=$(echo "$fingerprint" | cut -d'/' -f1)
-codename=$(grep -m1 -oP "(?<=^ro.product.device=).*" -hs {vendor,system,system/system}/build*.prop | head -1)
+codename=$(grep -m1 -oP "(?<=^ro.product.odm.device=).*" -hs odm/etc/build*.prop | head -1)
 [[ -z "${codename}" ]] && codename=$(grep -m1 -oP "(?<=^ro.vendor.product.device.oem=).*" -hs vendor/euclid/odm/build.prop | head -1)
 [[ -z "${codename}" ]] && codename=$(grep -m1 -oP "(?<=^ro.product.vendor.device=).*" -hs vendor/build*.prop | head -1)
 [[ -z "${codename}" ]] && codename=$(grep -m1 -oP "(?<=^ro.vendor.product.device=).*" -hs vendor/build*.prop | head -1)
@@ -1136,6 +1136,7 @@ if [[ -s "${PROJECT_DIR}"/.github_token ]]; then
 		chmod a+x join_split_files.sh 2>/dev/null
 	fi
 	rm -rf "${TMPDIR}" 2>/dev/null
+	GITPUSH=(git push https://${GITHUB_TOKEN}@github.com/${GIT_ORG}/${repo}.git "${branch}")
 	printf "\nFinal Repository Should Look Like...\n" && ls -lAog
 	printf "\n\nStarting Git Init...\n"
 	git init		# Insure Your Github Authorization Before Running This Script
@@ -1195,25 +1196,26 @@ EOF
 	printf "\nPushing to %s via HTTPS...\nBranch:%s\n" "https://github.com/${GIT_ORG}/${repo}.git" "${branch}"
 	sleep 1
 	git remote add origin https://${GITHUB_TOKEN}@github.com/${GIT_ORG}/${repo}.git "${branch}"
-	git lfs install
-	[ -e ".gitattributes" ] || find . -type f -not -path ".git/*" -size +100M -exec git lfs track {} \;
-	[ -e ".gitattributes" ] && {
-		git add ".gitattributes"
-		git commit -sm "Setup Git LFS"
-		git push -u origin "${branch}"
-	}
-	git add -- . ':!system/' ':!vendor/'
-	git commit -sm "Add extras for ${description}"
-	git push -u origin "${branch}"
+	git add --all
+	git commit -asm "Add ${description}"
+	git update-ref -d HEAD
+	git reset system/ vendor/ product/
+	git checkout -b "$branch"
+	git commit -asm "Add extras for ${description}" && "${GITPUSH[@]}"
 	git add vendor/
-	git commit -sm "Add vendor for ${description}"
-	git push -u origin "${branch}"
-	git add $(find -type f -name '*.apk')
-	git commit -sm "Add apps for ${description}"
-	git push -u origin "${branch}"
+	git commit -asm "Add vendor for ${description}" && "${GITPUSH[@]}"
+	git add system/system/app/ || git add system/app/
+	git commit -asm "Add system app for ${description}" && "${GITPUSH[@]}"
+	git add system/system/priv-app/ || git add system/priv-app/
+	git commit -asm "Add system priv-app for ${description}" && "${GITPUSH[@]}"
 	git add system/
-	git commit -sm "Add system for ${description}"
-	git push -u origin "${branch}"
+	git commit -asm "Add system for ${description}" && "${GITPUSH[@]}"
+	git add product/app/
+	git commit -asm "Add product app for ${description}" && "${GITPUSH[@]}"
+	git add product/priv-app/
+	git commit -asm "Add product priv-app for ${description}" && "${GITPUSH[@]}"
+	git add product/
+	git commit -asm "Add product for ${description}" && "${GITPUSH[@]}"
 	sleep 1
 	
 	# Telegram channel post
